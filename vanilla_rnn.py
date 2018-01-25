@@ -8,6 +8,8 @@ import operator
 import sys
 import matplotlib.pyplot as plt
 import util
+import pickle
+import timeit
 
 vocabulary_size = 8000
 unknown_token = "UNKNOWN_TOKEN"
@@ -155,4 +157,87 @@ class BasicRNN(object):
                     return
                 it.iternext()
             print("Gradient check pass for parameter %s" % pname)
+    def SGD(self,x,y,learning_rate=0.001):
+        dLdU,dLdV,dLdW = self.bptt(x,y)
+        self.U -= learning_rate * dLdU
+        self.V -= learning_rate * dLdV
+        self.W -= learning_rate * dLdW
+
+    def train_with_sgd(self, x_train, y_train, learning_rate=0.005, num_epoch=100, evaluate_loss_after=5):
+        losses = []
+        num_examples_seen = 0
+        for epoch in np.arange(num_epoch):
+            if (epoch % evaluate_loss_after == 0):
+                loss = self.calculate_loss(x_train, y_train)
+                losses.append((num_examples_seen, loss))
+                time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print("%s: Loss after num_examples_seen=%d epoch=%d: %f" % (time, num_examples_seen, epoch, loss))
+                self.save_model()
+
+                if (len(losses) > 1 and losses[-1][1] > losses[-2][1]):
+                    learning_rate *= 0.95
+                    print("Resetting the learing_rate to %f" % learning_rate)
+                sys.stdout.flush()
+            for i in range(len(y_train)):
+                self.SGD(x_train[i], y_train[i], learning_rate)
+                num_examples_seen += 1
+        return losses
+
+    def generate_text(self, word_to_index, index_to_word):
+        new_sentence = [word_to_index[sentence_start_token]]
+        while not new_sentence[-1] == word_to_index[sentence_end_token]:
+            new_word_probs = self.forward_propagation(new_sentence)
+            sample_word = word_to_index[unknown_token]
+            while sample_word == word_to_index[unknown_token]:
+                samples = np.random.multinomial(1, new_word_probs[-1])
+                sample_word = np.argmax(samples)
+            new_sentence.append(sample_word)
+        sentence_generated = [index_to_word[x] for x in new_sentence[1:-1]]
+        return sentence_generated
+    def save_model(self):
+        with open("model/model_parameters.pickle", "wb") as f:
+            pickle.dump([self.U,self.V,self.W], f)
+        print("Model Saved into model/model_parameters.pickle successfully!")
+
+##########################test case###########################
+np.random.seed(10)
+# model = BasicRNN(vocabulary_size)
+
+### check loss function
+model = BasicRNN(vocabulary_size)
+print("Expected Loss for random predictions: %f" % np.log(vocabulary_size))
+print("Actual loss: %f" % model.calculate_total_loss(X_train[:1000],y_train[:1000]))
+
+
+### gradient check ###
+grad_check_vocab_size = 100
+np.random.seed(10)
+model = BasicRNN(grad_check_vocab_size, 10, bptt_truncate=100000)
+model.gradient_check([0,1,2,3],[2,3,4,5])
+
+
+### build the intuion about time cost of training rnn
+model = BasicRNN(vocabulary_size)
+print("time cost of single SGD step:", timeit.timeit('model.SGD(X_train[10],y_train[10],0.005)'))
+
+
+### train model ###
+model = BasicRNN(vocabulary_size)
+losses = model.train_with_sgd(X_train[:100], y_train[:100], num_epoch=10, evaluate_loss_after=1)
+
+### generate new sentences ###
+num_sentences = 10
+sentence_min_length = 7
+
+for i in range(num_sentences):
+    sent = []
+    while len(sent) < sentence_min_length:
+        sent =model.generate_text(word_to_index,index_to_word)
+    print(' '.join(sent))
+
+# learning curve
+x,y = zip(*losses)
+plt.plot(x,y)
+plt.show()
+
 
