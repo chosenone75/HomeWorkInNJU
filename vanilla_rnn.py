@@ -7,7 +7,7 @@ import nltk
 import operator
 import sys
 import matplotlib.pyplot as plt
-import util
+from util import softmax
 import pickle
 import timeit
 
@@ -122,7 +122,7 @@ class BasicRNN(object):
             # backpropagation through time (for at most self.bptt_truncate steps)
             for bptt_step in np.arange(max(0, t - self.bptt_truncate), t+1)[::-1]:
                 dLdW += np.outer(delta_t, s[bptt_step-1])
-                dLdU[:,[x[bptt_step]]] += delta_t
+                dLdU[:,x[bptt_step]] += delta_t
                 delta_t = self.W.T.dot(delta_t) * (1 - (s[bptt_step-1] ** 2))
         return [dLdU, dLdV, dLdW]
 
@@ -150,7 +150,7 @@ class BasicRNN(object):
                 if relative_error > error_threshold:
                     print("Gradient check ERROR: parameter=%s, ix=%s" % (pname, ix))
                     print("+h loss: %f" % gradplus)
-                    print("-h loss: %f" & gradminus)
+                    print("-h loss: %f" % gradminus)
                     print("Estimated gradient: %f" % estimated_gradient)
                     print("backpropagation gradient: %f" % backprop_gradient)
                     print("relative error: %f" % relative_error)
@@ -186,16 +186,16 @@ class BasicRNN(object):
     def generate_text(self, word_to_index, index_to_word):
         new_sentence = [word_to_index[sentence_start_token]]
         while not new_sentence[-1] == word_to_index[sentence_end_token]:
-            new_word_probs = self.forward_propagation(new_sentence)
+            new_word_probs,_ = self.forward_propagation(new_sentence)
             sample_word = word_to_index[unknown_token]
             while sample_word == word_to_index[unknown_token]:
-                samples = np.random.multinomial(1, new_word_probs[-1])
+                samples = np.random.multinomial(100, new_word_probs[-1])
                 sample_word = np.argmax(samples)
             new_sentence.append(sample_word)
         sentence_generated = [index_to_word[x] for x in new_sentence[1:-1]]
         return sentence_generated
     def save_model(self):
-        with open("model/model_parameters.pickle", "wb") as f:
+        with open("model/model-parameters.pickle", "wb") as f:
             pickle.dump([self.U,self.V,self.W], f)
         print("Model Saved into model/model_parameters.pickle successfully!")
 
@@ -206,7 +206,7 @@ np.random.seed(10)
 ### check loss function
 model = BasicRNN(vocabulary_size)
 print("Expected Loss for random predictions: %f" % np.log(vocabulary_size))
-print("Actual loss: %f" % model.calculate_total_loss(X_train[:1000],y_train[:1000]))
+print("Actual loss: %f" % model.calculate_loss(X_train[:1000],y_train[:1000]))
 
 
 ### gradient check ###
@@ -218,8 +218,10 @@ model.gradient_check([0,1,2,3],[2,3,4,5])
 
 ### build the intuion about time cost of training rnn
 model = BasicRNN(vocabulary_size)
-print("time cost of single SGD step:", timeit.timeit('model.SGD(X_train[10],y_train[10],0.005)'))
-
+begin = datetime.now()
+model.SGD(X_train[10],y_train[10],0.005)
+end = datetime.now()
+print("time cost of single SGD step %s s" % (end - begin))
 
 ### train model ###
 model = BasicRNN(vocabulary_size)
