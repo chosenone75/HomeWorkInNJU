@@ -189,7 +189,7 @@ class BasicRNN(object):
             new_word_probs,_ = self.forward_propagation(new_sentence)
             sample_word = word_to_index[unknown_token]
             while sample_word == word_to_index[unknown_token]:
-                samples = np.random.multinomial(100, new_word_probs[-1])
+                samples = np.random.multinomial(1, new_word_probs[-1])
                 sample_word = np.argmax(samples)
             new_sentence.append(sample_word)
         sentence_generated = [index_to_word[x] for x in new_sentence[1:-1]]
